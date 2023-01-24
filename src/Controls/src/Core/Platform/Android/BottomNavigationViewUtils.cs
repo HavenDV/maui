@@ -93,7 +93,7 @@ namespace Microsoft.Maui.Controls.Platform
 				menuItem.Dispose();
 		}
 
-		static async Task SetMenuItemIcon(IMenuItem menuItem, ImageSource source, IMauiContext context)
+		internal static async Task SetMenuItemIcon(IMenuItem menuItem, ImageSource source, IMauiContext context)
 		{
 			if (!menuItem.IsAlive())
 				return;

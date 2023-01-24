@@ -8,3 +8,5 @@ Microsoft.Maui.Controls.VisualElement.RefreshIsEnabledProperty() -> void
 override Microsoft.Maui.Controls.Button.IsEnabledCore.get -> bool
 override Microsoft.Maui.Controls.ImageButton.IsEnabledCore.get -> bool
 override Microsoft.Maui.Controls.SearchBar.IsEnabledCore.get -> bool
+~virtual Microsoft.Maui.Controls.Platform.Compatibility.ShellItemRenderer.UpdateShellSectionIcon(Microsoft.Maui.Controls.ShellSection shellSection, Android.Views.IMenuItem menuItem) -> void
+~virtual Microsoft.Maui.Controls.Platform.Compatibility.ShellItemRenderer.UpdateShellSectionTitle(Microsoft.Maui.Controls.ShellSection shellSection, Android.Views.IMenuItem menuItem) -> void

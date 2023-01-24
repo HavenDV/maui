@@ -12,6 +12,7 @@ using Google.Android.Material.BottomNavigation;
 using Google.Android.Material.BottomSheet;
 using Google.Android.Material.Navigation;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Graphics;
 using AColor = Android.Graphics.Color;
 using AView = Android.Views.View;
@@ -59,6 +60,9 @@ namespace Microsoft.Maui.Controls.Platform.Compatibility
 		bool _appearanceSet;
 		public IShellItemController ShellItemController => ShellItem;
 		IMauiContext MauiContext => ShellContext.Shell.Handler.MauiContext;
+		IMenuItem _updateMenuItemTitle;
+		IMenuItem _updateMenuItemIcon;
+		ShellSection _updateMenuItemSource;
 
 		public ShellItemRenderer(IShellContext shellContext) : base(shellContext)
 		{
@@ -377,24 +381,53 @@ namespace Microsoft.Maui.Controls.Platform.Compatibility
 		{
 			base.OnShellSectionPropertyChanged(sender, e);
 
-			if (e.PropertyName == BaseShellItem.IsEnabledProperty.PropertyName)
+			if (e.IsOneOf(BaseShellItem.TitleProperty, BaseShellItem.IconProperty, BaseShellItem.IsEnabledProperty))
 			{
-				var content = (ShellSection)sender;
-				var index = ((IShellItemController)ShellItem).GetItems().IndexOf(content);
+				var shellSection = (ShellSection)sender;
+				var index = ((IShellItemController)ShellItem).GetItems().IndexOf(shellSection);
 
 				var itemCount = ((IShellItemController)ShellItem).GetItems().Count;
 				var maxItems = _bottomView.MaxItemCount;
+				IMenuItem menuItem = null;
 
-				if (itemCount > maxItems && index > maxItems - 2)
-					return;
+				if (!(itemCount > maxItems && index > maxItems - 2))
+				{
+					menuItem = _bottomView.Menu.FindItem(index);
+				}
 
-				var menuItem = _bottomView.Menu.FindItem(index);
-				UpdateShellSectionEnabled(content, menuItem);
-			}
-			else if (e.PropertyName == BaseShellItem.TitleProperty.PropertyName ||
-				e.PropertyName == BaseShellItem.IconProperty.PropertyName)
-			{
-				SetupMenu();
+				if (menuItem != null)
+				{
+					if (e.Is(BaseShellItem.IsEnabledProperty))
+					{
+						UpdateShellSectionEnabled(shellSection, menuItem);
+					}
+					else if (e.Is(BaseShellItem.IconProperty))
+					{
+						_updateMenuItemIcon = menuItem;
+					}
+					else if (e.Is(BaseShellItem.TitleProperty))
+					{
+						_updateMenuItemTitle = menuItem;
+					}
+				}
+
+				// This is primarily used so that `SetupMenu` is still called when the
+				// title and icon property change calls happen. We don't want to break users
+				// that are dependent on that behavior
+				if (e.IsOneOf(BaseShellItem.IconProperty, BaseShellItem.TitleProperty))
+				{
+					try
+					{
+						_updateMenuItemSource = shellSection;
+						SetupMenu();
+					}
+					finally
+					{
+						_updateMenuItemIcon = null;
+						_updateMenuItemTitle = null;
+						_updateMenuItemSource = null;
+					}
+				}
 			}
 		}
 
@@ -406,6 +439,35 @@ namespace Microsoft.Maui.Controls.Platform.Compatibility
 
 		protected virtual void SetupMenu(IMenu menu, int maxBottomItems, ShellItem shellItem)
 		{
+			if (_menuSetup &&
+				_updateMenuItemIcon != null &&
+				_updateMenuItemSource != null &&
+				_bottomView.IsAlive() &&
+				_bottomView?.IsAttachedToWindow == true)
+			{
+				var menuItem = _updateMenuItemIcon;
+				var shellSection = _updateMenuItemSource;
+				_updateMenuItemSource = null;
+				_updateMenuItemIcon = null;
+
+				UpdateShellSectionIcon(shellSection, menuItem);
+				return;
+			}
+			else if (_menuSetup &&
+				_updateMenuItemTitle != null &&
+				_updateMenuItemSource != null &&
+				_bottomView.IsAlive() &&
+				_bottomView?.IsAttachedToWindow == true)
+			{
+				var menuItem = _updateMenuItemTitle;
+				var shellSection = _updateMenuItemSource;
+				_updateMenuItemSource = null;
+				_updateMenuItemIcon = null;
+
+				UpdateShellSectionTitle(shellSection, menuItem);
+				return;
+			}
+
 			if (DisplayedPage == null)
 				return;
 
@@ -425,6 +487,21 @@ namespace Microsoft.Maui.Controls.Platform.Compatibility
 			}
 
 			UpdateTabBarVisibility();
+		}
+
+		protected virtual void UpdateShellSectionIcon(ShellSection shellSection, IMenuItem menuItem)
+		{
+			BottomNavigationViewUtils.SetMenuItemIcon(menuItem, shellSection.Icon, MauiContext)
+				.FireAndForget(e => MauiContext?.CreateLogger<ShellItemRenderer>()?
+						.LogWarning(e, "Failed to Update Shell Section Icon"));
+		}
+
+		protected virtual void UpdateShellSectionTitle(ShellSection shellSection, IMenuItem menuItem)
+		{
+			using (var title = new Java.Lang.String(shellSection.Title))
+			{
+				menuItem.SetTitle(title);
+			}
 		}
 
 		protected virtual void UpdateShellSectionEnabled(ShellSection shellSection, IMenuItem menuItem)
